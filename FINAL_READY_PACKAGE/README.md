@@ -13,14 +13,6 @@ This is the final clean package for GitHub preparation and journal submission.
 - **`figures/FIGURE_MANIFEST_FINAL.md`**: Figure manifest.
 - **`tables/TABLE_MANIFEST_FINAL.md`**: Table manifest.
 
-## Required binary exports
-
-The final PDF and DOCX should be added here after export:
-
-- **`FINAL_POLISHED_MANUSCRIPT.pdf`**
-- **`FINAL_POLISHED_MANUSCRIPT.docx`**
-
-Do not use placeholder PDF or DOCX files for journal submission.
 
 ## Source package
 
