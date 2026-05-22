@@ -1,0 +1,28 @@
+# Governance-Aware HR Attrition Evaluation Framework
+# Pinned runtime environment for full reproducibility
+# Python 3.11+ recommended
+
+# Core ML
+catboost==1.2.7
+scikit-learn==1.5.2
+
+# Numerical / data
+numpy==2.0.2
+pandas==2.2.3
+scipy==1.14.1
+
+# Explainability
+shap==0.46.0
+
+# Visualization
+matplotlib==3.9.4
+seaborn==0.13.2
+
+# Optional — proxy audit (used in hardened_pipeline.py)
+# mutual_info_classif is part of scikit-learn; no extra package needed
+
+# Optional — dimensionality reduction (UMAP, if used instead of PCA)
+# umap-learn==0.5.7
+
+# Jupyter (optional, for interactive exploration)
+# jupyter==1.1.1

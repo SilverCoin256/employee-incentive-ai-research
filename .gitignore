@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+.env
+
+# generated figures
+figures/*.png
+figures/*.pdf
+figures/*.svg
+
+# dataset (download from Kaggle separately)
+data/*.csv
+
+# catboost training artifacts
+catboost_info/
+
+# macOS
+.DS_Store
+
+# jupyter checkpoints
+.ipynb_checkpoints/

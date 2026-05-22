@@ -1,0 +1,170 @@
+{
+  "dataset": {
+    "n_samples": 1470,
+    "n_features": 30,
+    "base_rate": 0.1612
+  },
+  "cross_validation": {
+    "protocol": "Stratified 5-Fold CV (random_state=42)",
+    "n_folds": 5,
+    "per_fold": [
+      {
+        "fold": 1,
+        "auc": 0.7671917344173442,
+        "brier": 0.12221102737073436,
+        "avg_prec": 0.4897299105530548,
+        "accuracy": 0.8503401360544217,
+        "ece": 0.07626114180365194,
+        "dpd_gender": 0.005327392483533519,
+        "eod_gender": 0.16333938294010886
+      },
+      {
+        "fold": 2,
+        "auc": 0.8138550135501355,
+        "brier": 0.11059805098197031,
+        "avg_prec": 0.5519968163324782,
+        "accuracy": 0.8537414965986394,
+        "ece": 0.05926348633038791,
+        "dpd_gender": 0.04031900753212228,
+        "eod_gender": 0.22222222222222227
+      },
+      {
+        "fold": 3,
+        "auc": 0.8123869411663365,
+        "brier": 0.10031659135897143,
+        "avg_prec": 0.5655016159922109,
+        "accuracy": 0.8809523809523809,
+        "ece": 0.05274493211349019,
+        "dpd_gender": 0.011206896551724146,
+        "eod_gender": 0.1085972850678733
+      },
+      {
+        "fold": 4,
+        "auc": 0.8285812731501423,
+        "brier": 0.10100868707619687,
+        "avg_prec": 0.5671626813977532,
+        "accuracy": 0.8707482993197279,
+        "ece": 0.03881270856727589,
+        "dpd_gender": 0.005159763313609456,
+        "eod_gender": 0.06666666666666671
+      },
+      {
+        "fold": 5,
+        "auc": 0.7848221207683693,
+        "brier": 0.11075694232140199,
+        "avg_prec": 0.5528604148866958,
+        "accuracy": 0.8435374149659864,
+        "ece": 0.06930691631685014,
+        "dpd_gender": 0.011526540100736143,
+        "eod_gender": 0.04509803921568628
+      }
+    ],
+    "summary": {
+      "auc": {
+        "mean": 0.8014,
+        "std": 0.0248,
+        "ci95_lo": 0.7796,
+        "ci95_hi": 0.8231
+      },
+      "brier": {
+        "mean": 0.109,
+        "std": 0.0089,
+        "ci95_lo": 0.1011,
+        "ci95_hi": 0.1168
+      },
+      "avg_prec": {
+        "mean": 0.5455,
+        "std": 0.0319,
+        "ci95_lo": 0.5175,
+        "ci95_hi": 0.5734
+      },
+      "accuracy": {
+        "mean": 0.8599,
+        "std": 0.0155,
+        "ci95_lo": 0.8463,
+        "ci95_hi": 0.8734
+      },
+      "ece": {
+        "mean": 0.0593,
+        "std": 0.0146,
+        "ci95_lo": 0.0465,
+        "ci95_hi": 0.0721
+      },
+      "dpd_gender": {
+        "mean": 0.0147,
+        "std": 0.0146,
+        "ci95_lo": 0.0019,
+        "ci95_hi": 0.0275
+      },
+      "eod_gender": {
+        "mean": 0.1212,
+        "std": 0.0723,
+        "ci95_lo": 0.0578,
+        "ci95_hi": 0.1846
+      }
+    }
+  },
+  "calibration": {
+    "pooled_ece_10bin": 0.0531,
+    "brier_cv_mean": 0.109,
+    "brier_cv_std": 0.0089
+  },
+  "fairness_metrics": {
+    "gender": {
+      "dpd": 0.0147,
+      "eod": 0.1212
+    },
+    "marital_status": {
+      "dpd": 0.1237,
+      "eod": 0.1553
+    },
+    "age_band": {
+      "dpd": 0.1566,
+      "eod": 0.2661
+    }
+  },
+  "proxy_audit": {
+    "Gender_binary": {
+      "top_proxies": [
+        {"feature": "YearsInCurrentRole", "mi_score": 0.0308},
+        {"feature": "HourlyRate", "mi_score": 0.0304},
+        {"feature": "OvertimeFrequency", "mi_score": 0.0167},
+        {"feature": "MonthlyRate", "mi_score": 0.0132},
+        {"feature": "CompensationProgression", "mi_score": 0.0113}
+      ],
+      "any_above_0.15": false
+    },
+    "MaritalStatus": {
+      "top_proxies": [
+        {"feature": "StockOptionLevel", "mi_score": 0.4264},
+        {"feature": "DailyRate", "mi_score": 0.0396},
+        {"feature": "TotalWorkingYears", "mi_score": 0.031},
+        {"feature": "NumCompaniesWorked", "mi_score": 0.0209},
+        {"feature": "CompensationProgression", "mi_score": 0.0182}
+      ],
+      "any_above_0.15": true
+    },
+    "AgeBand": {
+      "top_proxies": [
+        {"feature": "TotalWorkingYears", "mi_score": 0.3859},
+        {"feature": "MonthlyIncome", "mi_score": 0.1644},
+        {"feature": "JobLevel", "mi_score": 0.1513},
+        {"feature": "PerfCompAlignment", "mi_score": 0.1378},
+        {"feature": "YearsAtCompany", "mi_score": 0.1171}
+      ],
+      "any_above_0.15": true
+    }
+  },
+  "clustering": {
+    "method": "PCA(10 components) + KMeans(k=2)",
+    "pca_variance_explained": 0.6659,
+    "best_k": 2,
+    "silhouette": 0.2357,
+    "governance_threshold": 0.3,
+    "threshold_passed": false,
+    "cluster_sizes": {
+      "0": 398,
+      "1": 1072
+    }
+  }
+}
