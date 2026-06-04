@@ -1,12 +1,14 @@
 """
-Hardened Evaluation Pipeline — Reviewer-Response Version
-Addresses all Tier-1 and Tier-2 statistical deficiencies identified in peer review:
-  - Stratified 5-Fold Cross-Validation (replaces single train/test split)
+Hardened evaluation pipeline — post-review version.
+
+Fixes the statistical problems reviewers flagged:
+  - Stratified 5-fold CV (was a single train/test split)
   - Expected Calibration Error (ECE) with 10 bins
   - Demographic Parity Difference (DPD) and Equalized Odds Difference (EOD)
   - PCA-projected KMeans clustering (targets silhouette > 0.30)
   - Proxy-variable mutual information audit
-Outputs structured JSON for manuscript reference.
+
+Writes structured JSON for manuscript reference.
 """
 
 import json

@@ -9,9 +9,9 @@ Code and evaluation pipeline for:
 
 ## What this is
 
-This paper evaluates a CatBoost-based attrition prediction model on the IBM HR Analytics dataset using a nine-stage governance-instrumented framework. The goal is not a new model — it's a structured evaluation architecture that produces calibration diagnostics, fairness escalation signals, and interpretability outputs with explicit interpretive boundaries.
+This repo tests a CatBoost model on the IBM HR Analytics dataset through a nine-stage pipeline with governance checks. The goal isn't a new model. It's the evaluation architecture — how you actually audit calibration, fairness, and interpretability in a real HR context where you can't just ship a model because it scores well.
 
-The main contribution is the evaluation design itself. The IBM dataset is synthetic and public, selected deliberately so anyone can replicate the full pipeline without data access barriers.
+The real contribution here is the evaluation design. The IBM dataset is synthetic and public, picked so anyone can replicate the full pipeline without begging for data access.
 
 ---
 
@@ -77,13 +77,13 @@ From `hardened_results.json` — 5-fold stratified CV, random_state=42:
 | EOD (Gender) | 0.121 |
 | Proxy MI — MaritalStatus top feature | 0.426 (StockOptionLevel) |
 
-Clustering: all four families (DBSCAN, KMeans, PCA+KMeans, GMM) fell below the 0.30 silhouette governance threshold. This is a diagnostic outcome, not something omitted — the paper explicitly reports it as a negative segmentation finding.
+Clustering: all four families (DBSCAN, KMeans, PCA+KMeans, GMM) fell below the 0.30 silhouette governance threshold. This isn't something I hid — the paper reports it as a negative segmentation finding.
 
 ---
 
 ## Limitations
 
-The IBM HR dataset is synthetic and not from a real organization. All results demonstrate evaluation framework mechanics. Generalization to real workforces requires external validation with appropriate data provenance. The paper's Scope Conditions section lays this out explicitly.
+The IBM HR dataset is synthetic and not from a real organization. All results demonstrate evaluation framework mechanics. Generalization to real workforces requires external validation with appropriate data provenance. The paper's Scope Conditions section says so directly.
 
 The `FINAL_READY_PACKAGE/` folder contains an earlier draft PDF from a prior submission round — kept here for reference but is not the current manuscript.
 

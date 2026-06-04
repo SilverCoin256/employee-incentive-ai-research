@@ -1,11 +1,8 @@
 """
-Figure generation for:
-  Calibration, Explainability, and Fairness Auditing in HR Attrition Prediction:
-  A Governance-Aware Evaluation Framework for Enterprise AI under Constrained Data Conditions
-  -- Discover Artificial Intelligence (Springer Nature) --
+Figure generation script.
 
-All empirical values come directly from hardened_results.json.
-No data fabrication. Mock distributions are parameterised from verified CV results
+All values come from hardened_results.json — no fabricated data.
+Mock distributions are built from the verified CV results
 (AUC=0.8014, Brier=0.109, ECE=0.053).
 
 Usage:
