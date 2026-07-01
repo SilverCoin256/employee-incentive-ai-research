@@ -21,3 +21,6 @@ catboost_info/
 
 # jupyter checkpoints
 .ipynb_checkpoints/
+
+# dataset (obtain from Kaggle; see data/README.md)
+data/ibm_hr_attrition.csv

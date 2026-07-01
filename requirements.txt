@@ -1,28 +1,13 @@
-# Governance-Aware HR Attrition Evaluation Framework
-# Pinned runtime environment for full reproducibility
-# Python 3.11+ recommended
+# Reproducible environment for run_real_empirical_pipeline.py
+# Python 3.11 recommended. Tested versions noted in comments.
 
-# Core ML
-catboost==1.2.7
-scikit-learn==1.5.2
+catboost>=1.2.7        # tested 1.2.10
+scikit-learn>=1.5      # tested 1.9.0
+numpy>=1.26
+pandas>=2.0
+scipy>=1.11
+matplotlib>=3.8
 
-# Numerical / data
-numpy==2.0.2
-pandas==2.2.3
-scipy==1.14.1
-
-# Explainability
-shap==0.46.0
-
-# Visualization
-matplotlib==3.9.4
-seaborn==0.13.2
-
-# Optional — proxy audit (used in hardened_pipeline.py)
-# mutual_info_classif is part of scikit-learn; no extra package needed
-
-# Optional — dimensionality reduction (UMAP, if used instead of PCA)
-# umap-learn==0.5.7
-
-# Jupyter (optional, for interactive exploration)
-# jupyter==1.1.1
+# Optional. If shap is absent, the pipeline uses CatBoost's native
+# (exact TreeSHAP) Shapley values instead.
+# shap>=0.44
