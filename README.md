@@ -14,9 +14,25 @@ uncertainty, explainability, and fairness. The contribution is the evaluation
 architecture, not a new model. The IBM HR Analytics dataset is synthetic and public,
 chosen so the whole pipeline can be replicated without data-access barriers.
 
-Everything reported in the manuscript is produced by one run of
-`run_real_empirical_pipeline.py`. Figures are generated only from that run's
-artifacts — no values are embedded in the plotting code.
+Everything reported in the manuscript is produced by one run of **`pipeline.py`**
+(seed = 42). It writes `results/results.json` and regenerates every figure
+(`figures/`) directly from the run's raw predictions — no values are embedded in
+the plotting code. Run it with:
+
+```
+pip install -r requirements.txt        # numpy, pandas, scikit-learn, catboost, shap, matplotlib, scipy
+python3 pipeline.py                     # -> results/results.json + figures/*.{png,pdf,svg}
+```
+
+Headline outputs (CatBoost, 5-fold CV, protected attributes excluded, native
+categoricals, 5:1 positive-class weight): ROC-AUC 0.815 (σ 0.034), ECE 0.032,
+Brier 0.102; leave-group-out compensation drop 0.022, compensation-only 0.680;
+age-band EOD 0.353, compensation-band Cramér's V 0.281; proxy MI
+StockOptionLevel→MaritalStatus 0.426, TotalWorkingYears→Age 0.582.
+
+The earlier `run_real_empirical_pipeline.py` / `generate_figures.py` scripts are
+retained under `legacy/` for provenance; `pipeline.py` is the single authoritative
+reproducer for the current manuscript.
 
 ---
 
