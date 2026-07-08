@@ -1,4 +1,4 @@
-# Reproducible environment for run_real_empirical_pipeline.py
+# Reproducible environment for pipeline.py
 # Python 3.11 recommended. Tested versions noted in comments.
 
 catboost>=1.2.7        # tested 1.2.10
@@ -8,6 +8,6 @@ pandas>=2.0
 scipy>=1.11
 matplotlib>=3.8
 
-# Optional. If shap is absent, the pipeline uses CatBoost's native
-# (exact TreeSHAP) Shapley values instead.
-# shap>=0.44
+# shap is not required: pipeline.py calls CatBoost's native
+# get_feature_importance(type="ShapValues"), which is exact TreeSHAP
+# computed internally without the shap package.
