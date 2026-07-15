@@ -1,7 +1,13 @@
 """
 Single reproducible pipeline for the HR-attrition governance-audit manuscript.
 Produces EVERY reported number and figure from one script/one dataset/one model version.
-Run: python3 pipeline.py  -> writes results.json and figs/*.png
+Run from the repository root:
+    python3 pipeline.py
+Reads  data/ibm_hr_attrition.csv
+Writes results/results.json and figures/*.{png,pdf,svg}
+
+Every number in the manuscript, response letter, and supplementary material is a
+key in results/results.json; see TRACEABILITY.md for the number-by-number map.
 """
 import json, warnings, numpy as np, pandas as pd
 warnings.filterwarnings("ignore")
@@ -21,17 +27,17 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import (roc_auc_score, average_precision_score, brier_score_loss,
                              accuracy_score, confusion_matrix, silhouette_score)
 from sklearn.feature_selection import mutual_info_classif, mutual_info_regression
-from sklearn.inspection import permutation_importance
 from scipy.stats import spearmanr
 from catboost import CatBoostClassifier, Pool
-import os
-os.makedirs("figs", exist_ok=True)
+import os, hashlib, sys, platform, datetime
+FIG = "figures"; os.makedirs(FIG, exist_ok=True); os.makedirs("results", exist_ok=True)
 SEED = 42
 rng = np.random.RandomState(SEED)
 R = {}  # results dict
 
 # ---------- load ----------
-df = pd.read_csv("hr.csv")
+DATA = "data/ibm_hr_attrition.csv"
+df = pd.read_csv(DATA, encoding="utf-8-sig")
 df = df.drop(columns=["EmployeeCount","Over18","StandardHours","EmployeeNumber"])
 y = (df["Attrition"] == "Yes").astype(int).values
 df = df.drop(columns=["Attrition"])
@@ -153,30 +159,50 @@ for _ in range(1000):
 R["bootstrap_auc_ci"]=ci95(np.array(boot_auc))
 
 # ============ Benchmark matrix (Table 3) ============
+def summarize(a,b,ap,ac,oof_):
+    """Per-fold arrays + pooled OOF -> mean, fold-SD, normal-approx 95% CI, pooled ECE."""
+    return dict(auc=float(a.mean()),auc_sd=float(a.std(ddof=1)),
+                auc_ci=[float(a.mean()-1.96*a.std(ddof=1)/np.sqrt(5)),
+                        float(a.mean()+1.96*a.std(ddof=1)/np.sqrt(5))],
+                ap=float(ap.mean()),ap_sd=float(ap.std(ddof=1)),
+                brier=float(b.mean()),brier_sd=float(b.std(ddof=1)),
+                acc=float(ac.mean()),acc_sd=float(ac.std(ddof=1)),
+                ece=ece_score(y,oof_,10,False))
 def eval_cb(cols):
     oof_,a,b,ap,ac,_=catboost_cv_oof(X_all,y,cols)
-    return dict(auc=float(a.mean()),ap=float(ap.mean()),brier=float(b.mean()),acc=float(ac.mean()))
+    return summarize(a,b,ap,ac,oof_)
 comp_removed=[c for c in X_all.columns if c not in COMP]
 R["bench"]={}
-R["bench"]["cb_all"]=dict(auc=R["cv"]["auc_mean"],ap=R["cv"]["ap_mean"],brier=R["cv"]["brier_mean"],acc=R["cv"]["acc_mean"])
+R["bench"]["cb_all"]=summarize(aucs,briers,aps,accs,oof)
 R["bench"]["cb_comp_removed"]=eval_cb(comp_removed)
 R["bench"]["cb_comp_only"]=eval_cb(COMP)
+
+# CatBoost without class weighting: per-fold metrics from oof_unw (same folds, no refit)
+a=[];b=[];ap_=[];ac=[]
+for tr,va in StratifiedKFold(5,shuffle=True,random_state=SEED).split(Xd,y):
+    p=oof_unw[va]
+    a.append(roc_auc_score(y[va],p));b.append(brier_score_loss(y[va],p))
+    ap_.append(average_precision_score(y[va],p));ac.append(accuracy_score(y[va],(p>=.5).astype(int)))
+R["bench"]["cb_all_unweighted"]=summarize(np.array(a),np.array(b),np.array(ap_),np.array(ac),oof_unw)
 
 # LR & RF need numeric encoding
 pre=ColumnTransformer([("num",StandardScaler(),num_cols),
                        ("cat",OneHotEncoder(handle_unknown="ignore"),cat_cols)])
 def eval_sklearn(est):
     skf=StratifiedKFold(5,shuffle=True,random_state=SEED)
-    a=[];ap=[];br=[];ac=[]
+    a=[];ap=[];br=[];ac=[];oof_=np.zeros(len(y))
     for tr,va in skf.split(X_all,y):
         pipe=Pipeline([("pre",pre),("clf",est)])
         pipe.fit(X_all.iloc[tr],y[tr])
         p=pipe.predict_proba(X_all.iloc[va])[:,1]
+        oof_[va]=p
         a.append(roc_auc_score(y[va],p));ap.append(average_precision_score(y[va],p))
         br.append(brier_score_loss(y[va],p));ac.append(accuracy_score(y[va],(p>=.5).astype(int)))
-    return dict(auc=float(np.mean(a)),ap=float(np.mean(ap)),brier=float(np.mean(br)),acc=float(np.mean(ac)))
-R["bench"]["lr"]=eval_sklearn(LogisticRegression(max_iter=1000,C=1.0,class_weight="balanced"))
-R["bench"]["rf"]=eval_sklearn(RandomForestClassifier(n_estimators=400,min_samples_leaf=2,random_state=SEED,class_weight="balanced"))
+    return summarize(np.array(a),np.array(br),np.array(ap),np.array(ac),oof_), oof_
+R["bench"]["lr"],oof_lr_bal=eval_sklearn(LogisticRegression(max_iter=1000,C=1.0,class_weight="balanced"))
+R["bench"]["lr_unweighted"],oof_lr=eval_sklearn(LogisticRegression(max_iter=1000,C=1.0))
+R["bench"]["rf"],_=eval_sklearn(RandomForestClassifier(n_estimators=400,min_samples_leaf=2,random_state=SEED,class_weight="balanced"))
+R["bench"]["rf_unweighted"],_=eval_sklearn(RandomForestClassifier(n_estimators=400,min_samples_leaf=2,random_state=SEED))
 # majority
 skf=StratifiedKFold(5,shuffle=True,random_state=SEED); a=[];ap=[];br=[];ac=[]
 for tr,va in skf.split(X_all,y):
@@ -272,10 +298,6 @@ seg["DBSCAN_ge2"]=dbscan_ok
 R["seg"]=seg
 
 # ============ Permutation importance + SHAP ============
-perm=permutation_importance(mh, Xte, yte, n_repeats=10, random_state=SEED,
-                            scoring="roc_auc")
-# Xte has categoricals as object -> catboost predict handles; permutation_importance needs numeric predict? use wrapper
-# fallback: compute perm on catboost via manual
 def auc_of(model,Xf): return roc_auc_score(yte, model.predict_proba(Pool(Xf,cat_features=cat_idx))[:,1])
 base_auc=auc_of(mh,Xte)
 perm_imp={}
@@ -308,6 +330,245 @@ for col in shap_s.head(5).index:
     sane.append(abs(base_s-roc_auc_score(yte,msan.predict_proba(Pool(Xperm,cat_features=cat_idx))[:,1])))
 R["sanity_permlabel_maxdrop"]=float(np.max(sane))
 
+# =====================================================================
+# EXTENDED AUDIT COMPUTATIONS (second revision)
+# Every block below uses its OWN RandomState; nothing reuses the global
+# `rng`, so all results above reproduce byte-identically.
+# =====================================================================
+
+# ---------- E1. Per-model optimism gap (train vs CV vs holdout AUC) ----------
+gaps={}
+gaps["catboost_weighted"]=dict(train_auc=R["train_auc"],holdout_auc=R["holdout_auc"],
+                               cv_auc=R["cv"]["auc_mean"])
+mg=CatBoostClassifier(iterations=400,learning_rate=0.05,depth=6,random_seed=SEED,verbose=0,allow_writing_files=False)
+mg.fit(Pool(Xtr,ytr,cat_features=cat_idx))
+gaps["catboost_unweighted"]=dict(
+    train_auc=float(roc_auc_score(ytr,mg.predict_proba(Pool(Xtr,cat_features=cat_idx))[:,1])),
+    holdout_auc=float(roc_auc_score(yte,mg.predict_proba(Pool(Xte,cat_features=cat_idx))[:,1])),
+    cv_auc=R["bench"]["cb_all_unweighted"]["auc"])
+for name,est,key in [
+        ("logreg_unweighted",LogisticRegression(max_iter=1000,C=1.0),"lr_unweighted"),
+        ("logreg_balanced",LogisticRegression(max_iter=1000,C=1.0,class_weight="balanced"),"lr"),
+        ("rf_balanced",RandomForestClassifier(n_estimators=400,min_samples_leaf=2,random_state=SEED,class_weight="balanced"),"rf"),
+        ("rf_unweighted",RandomForestClassifier(n_estimators=400,min_samples_leaf=2,random_state=SEED),"rf_unweighted")]:
+    pipe=Pipeline([("pre",pre),("clf",est)]).fit(Xtr,ytr)
+    gaps[name]=dict(train_auc=float(roc_auc_score(ytr,pipe.predict_proba(Xtr)[:,1])),
+                    holdout_auc=float(roc_auc_score(yte,pipe.predict_proba(Xte)[:,1])),
+                    cv_auc=R["bench"][key]["auc"])
+for v in gaps.values(): v["optimism_gap"]=round(v["train_auc"]-v["cv_auc"],4)
+R["overfit_gaps"]=gaps
+
+# ---------- E2. CatBoost regularization sweep (overfitting assessment) ----------
+sweep=[]
+for depth,iters,l2 in [(6,400,3),(4,400,3),(3,400,3),(6,100,3),(4,100,3),(6,400,10)]:
+    def mk(): return CatBoostClassifier(iterations=iters,learning_rate=0.05,depth=depth,
+              l2_leaf_reg=l2,class_weights=[1,5],random_seed=SEED,verbose=0,allow_writing_files=False)
+    aa=[]
+    for tr,va in StratifiedKFold(5,shuffle=True,random_state=SEED).split(Xd,y):
+        m_=mk(); m_.fit(Pool(Xd.iloc[tr],y[tr],cat_features=cat_idx))
+        aa.append(roc_auc_score(y[va],m_.predict_proba(Pool(Xd.iloc[va],cat_features=cat_idx))[:,1]))
+    m_=mk(); m_.fit(Pool(Xtr,ytr,cat_features=cat_idx))
+    tr_auc=float(roc_auc_score(ytr,m_.predict_proba(Pool(Xtr,cat_features=cat_idx))[:,1]))
+    sweep.append(dict(depth=depth,iterations=iters,l2_leaf_reg=l2,
+                      cv_auc=float(np.mean(aa)),cv_auc_sd=float(np.std(aa,ddof=1)),train_auc=tr_auc))
+R["cb_regularization_sweep"]=sweep
+
+# ---------- E3. Prespecified model-selection rule ----------
+# Gate: pooled CV ECE < 0.10 AND CV Brier below the base-rate (dummy) Brier
+# (positive Brier skill). Then: highest mean CV AUC; every gated config within
+# one fold-SD of the best -> select the least complex family (LR < RF < CatBoost).
+brier_ref=R["bench"]["dummy"]["brier"]
+candidates={"lr_unweighted":1,"lr":1,"rf_unweighted":2,"rf":2,"cb_all_unweighted":3,"cb_all":3}
+gated={k:R["bench"][k] for k in candidates
+       if R["bench"][k]["ece"]<0.10 and R["bench"][k]["brier"]<brier_ref}
+best=max(gated,key=lambda k:gated[k]["auc"])
+tol=gated[best]["auc"]-gated[best]["auc_sd"]
+within={k:v for k,v in gated.items() if v["auc"]>=tol}
+selected=min(within,key=lambda k:(candidates[k],-within[k]["auc"]))
+R["model_selection"]=dict(
+    rule=("Gate: pooled CV ECE<0.10 and CV Brier < base-rate (dummy) Brier; "
+          "then max CV AUC; configs within one fold-SD of the best -> least "
+          "complex model family (LR < RF < CatBoost)."),
+    brier_reference_dummy=float(brier_ref),
+    gated=sorted(gated),failed_gate=sorted(set(candidates)-set(gated)),
+    best_auc_config=best,one_sd_tolerance=float(tol),
+    within_tolerance=sorted(within),selected=selected)
+
+# ---------- E4. Repeated full-pipeline resampling (split-to-split variability) ----------
+# 100 stratified 80/20 splits; encoding fits, class weighting, and model training
+# are all repeated inside each split. This estimates variability across alternative
+# data splits and refits; the fixed-holdout bootstrap above is conditional on one
+# fitted model and one split, and is interpreted as such in the manuscript.
+def full_split_metrics(rs):
+    Xtr_,Xte_,ytr_,yte_=train_test_split(X_all,y,test_size=0.2,stratify=y,random_state=rs)
+    m_=cb_model(SEED); m_.fit(Pool(Xtr_,ytr_,cat_features=cat_idx))
+    p_=m_.predict_proba(Pool(Xte_,cat_features=cat_idx))[:,1]
+    lr_=Pipeline([("pre",pre),("clf",LogisticRegression(max_iter=1000,C=1.0))]).fit(Xtr_,ytr_)
+    pl_=lr_.predict_proba(Xte_)[:,1]
+    return (roc_auc_score(yte_,p_),brier_score_loss(yte_,p_),ece_score(yte_,p_,10,False),
+            roc_auc_score(yte_,pl_))
+rep=np.array([full_split_metrics(2000+r) for r in range(100)])
+R["repeated_splits"]=dict(
+    n_repeats=100,
+    cb_auc_mean=float(rep[:,0].mean()),cb_auc_sd=float(rep[:,0].std(ddof=1)),
+    cb_auc_p2_5_97_5=ci95(rep[:,0]),
+    cb_brier_mean=float(rep[:,1].mean()),cb_brier_p2_5_97_5=ci95(rep[:,1]),
+    cb_ece_mean=float(rep[:,2].mean()),cb_ece_p2_5_97_5=ci95(rep[:,2]),
+    lr_auc_mean=float(rep[:,3].mean()),lr_auc_sd=float(rep[:,3].std(ddof=1)),
+    lr_auc_p2_5_97_5=ci95(rep[:,3]))
+rep_split_aucs=rep[:,0]
+
+# ---------- E5. XAI validation with repeated controls ----------
+# (a) SHAP vs permutation-importance rank agreement across 10 permutation seeds
+def perm_importance_seed(seed):
+    r_=np.random.RandomState(seed); imp={}
+    for col in X_all.columns:
+        drops=[]
+        for _ in range(10):
+            Xp_=Xte.copy(); Xp_[col]=r_.permutation(Xp_[col].values)
+            drops.append(base_auc-auc_of(mh,Xp_))
+        imp[col]=float(np.mean(drops))
+    return pd.Series(imp)
+rhos=[]
+for s in range(10):
+    ps_=perm_importance_seed(3000+s)
+    rhos.append(float(spearmanr([shap_s[c] for c in common],[ps_[c] for c in common]).correlation))
+R["xai_spearman"]=dict(point=R["shap_perm_spearman"],repeats=[round(r_,4) for r_ in rhos],
+                       mean=float(np.mean(rhos)),sd=float(np.std(rhos,ddof=1)),
+                       min=float(np.min(rhos)),max=float(np.max(rhos)))
+
+# (b) deletion-faithfulness: jointly permute top-5 SHAP features vs random 5-feature sets
+r_mask=np.random.RandomState(4000)
+top5=list(shap_s.head(5).index)
+def joint_mask_drop(cols_,r_,reps):
+    ds=[]
+    for _ in range(reps):
+        Xp_=Xte.copy()
+        for c in cols_: Xp_[c]=r_.permutation(Xp_[c].values)
+        ds.append(base_auc-auc_of(mh,Xp_))
+    return np.array(ds)
+top_drops=joint_mask_drop(top5,r_mask,20)
+rand_means=[]
+for _ in range(20):
+    cols_=list(r_mask.choice(np.array(X_all.columns),5,replace=False))
+    rand_means.append(float(joint_mask_drop(cols_,r_mask,5).mean()))
+rand_means=np.array(rand_means)
+R["xai_masking"]=dict(top5_features=top5,n_top_repeats=20,n_random_sets=20,
+    top5_dauc_mean=float(top_drops.mean()),top5_dauc_sd=float(top_drops.std(ddof=1)),
+    random5_dauc_mean=float(rand_means.mean()),random5_dauc_sd=float(rand_means.std(ddof=1)),
+    z_vs_random=float((top_drops.mean()-rand_means.mean())/rand_means.std(ddof=1)))
+
+# (c) shuffled-label control: 10 refits on permuted training labels
+sl_auc=[];sl_maxdrop=[]
+for i in range(10):
+    r_=np.random.RandomState(5000+i)
+    ms_=cb_model(SEED); ms_.fit(Pool(Xtr,r_.permutation(ytr),cat_features=cat_idx))
+    ps_=ms_.predict_proba(Pool(Xte,cat_features=cat_idx))[:,1]
+    sl_auc.append(float(roc_auc_score(yte,ps_)))
+    b0=sl_auc[-1];dd=[]
+    for col in top5:
+        Xp_=Xte.copy();Xp_[col]=r_.permutation(Xp_[col].values)
+        dd.append(abs(b0-roc_auc_score(yte,ms_.predict_proba(Pool(Xp_,cat_features=cat_idx))[:,1])))
+    sl_maxdrop.append(float(np.max(dd)))
+R["xai_shuffled_label"]=dict(n_repeats=10,
+    auc_mean=float(np.mean(sl_auc)),auc_sd=float(np.std(sl_auc,ddof=1)),
+    auc_min=float(np.min(sl_auc)),auc_max=float(np.max(sl_auc)),
+    maxdrop_mean=float(np.mean(sl_maxdrop)),maxdrop_sd=float(np.std(sl_maxdrop,ddof=1)))
+
+# ---------- E6. MI permutation nulls (200 permutations, top proxy feature) ----------
+def mi_null(feature,target,is_reg,n_perm=200,seed=6000):
+    r_=np.random.RandomState(seed)
+    x=Xmi[[feature]].values
+    d=[0] if feature in cat_cols else False
+    f=mutual_info_regression if is_reg else mutual_info_classif
+    obs=float(f(x,target,discrete_features=d,random_state=SEED)[0])
+    null=np.array([float(f(x,r_.permutation(target),discrete_features=d,random_state=SEED)[0])
+                   for _ in range(n_perm)])
+    return dict(feature=feature,observed=obs,null_mean=float(null.mean()),
+                null_sd=float(null.std(ddof=1)),
+                z=float((obs-null.mean())/max(null.std(ddof=1),1e-12)),
+                p_perm=float((np.sum(null>=obs)+1)/(n_perm+1)),n_perm=n_perm)
+R["mi_null"]={
+ "Gender":mi_null(mi_gender.index[0],(protected_df["Gender"]=="Male").astype(int).values,False,seed=6000),
+ "MaritalStatus":mi_null(mi_marital.index[0],protected_df["MaritalStatus"].astype("category").cat.codes.values,False,seed=6001),
+ "Age":mi_null(mi_age.index[0],protected_df["Age"].values.astype(float),True,seed=6002)}
+
+# ---------- E7. Calibration extras (unweighted ECE with CI; holdout ECE) ----------
+R["ece_10bin_unweighted"]=ece_score(y,oof_unw,10,False)
+r_e=np.random.RandomState(8000); be=[]
+for _ in range(1000):
+    b=r_e.choice(idx,len(idx),replace=True)
+    be.append(ece_score(y[b],oof_unw[b],10,False))
+R["ece_unweighted_ci"]=ci95(np.array(be))
+R["holdout_ece"]=ece_score(yte,p_te,10,False)
+
+# ---------- E8. Fairness: subgroup sizes + bootstrap CIs; LR comparison ----------
+def fairness_full(group,preds,n_boot,seed):
+    g=pd.Series(group).reset_index(drop=True).astype(str).values
+    pred=(preds>=.5).astype(int)
+    levels=sorted(pd.unique(g))
+    sizes={l:dict(n=int((g==l).sum()),n_pos=int(((g==l)&(y==1)).sum())) for l in levels}
+    def metrics(bidx):
+        gb=g[bidx];pb=pred[bidx];yb=y[bidx]
+        rates=[];tprs=[];fprs=[]
+        for l in levels:
+            m=gb==l
+            if m.sum()==0: return None
+            rates.append(pb[m].mean())
+            pos=m&(yb==1);neg=m&(yb==0)
+            if pos.sum()>0: tprs.append(pb[pos].mean())
+            if neg.sum()>0: fprs.append(pb[neg].mean())
+        rates=np.array(rates);tprs=np.array(tprs);fprs=np.array(fprs)
+        dir_=rates.min()/rates.max() if rates.max()>0 else np.nan
+        dpd=rates.max()-rates.min()
+        eod=max(tprs.max()-tprs.min() if len(tprs) else 0.0,
+                fprs.max()-fprs.min() if len(fprs) else 0.0)
+        v=cramers_v(pd.Series(pb),pd.Series(gb))
+        return dir_,dpd,eod,v
+    point=metrics(np.arange(len(y)))
+    r_=np.random.RandomState(seed);boot=[];tries=0
+    while len(boot)<n_boot and tries<n_boot*3:
+        tries+=1
+        m_=metrics(r_.choice(len(y),len(y),replace=True))
+        if m_ is not None and not any(np.isnan(np.array(m_,dtype=float))): boot.append(m_)
+    boot=np.array(boot)
+    return dict(dir=float(point[0]),dpd=float(point[1]),eod=float(point[2]),cv=float(point[3]),
+                dir_ci=ci95(boot[:,0]),dpd_ci=ci95(boot[:,1]),
+                eod_ci=ci95(boot[:,2]),cv_ci=ci95(boot[:,3]),
+                n_boot_effective=int(len(boot)),groups=sizes)
+FAIR_ATTRS=[("Gender",protected_df["Gender"].values),("Age band",age_band.values),
+            ("Compensation band",comp_band.values),("Marital status",protected_df["MaritalStatus"].values),
+            ("Department",df["Department"].values)]
+R["fair_full"]={name:fairness_full(grp,oof,1000,7000+i) for i,(name,grp) in enumerate(FAIR_ATTRS)}
+R["fair_lr_unweighted"]={name:fairness_full(grp,oof_lr,200,7500+i) for i,(name,grp) in enumerate(FAIR_ATTRS)}
+
+# ---------- E9. Governance-threshold sensitivity (all thresholds) ----------
+sil_max=float(max(seg["KMeans"],seg["PCA10+KMeans"],seg["GMM"]))
+ts={}
+ts["ece"]=dict(value_weighted=R["ece_10bin"],value_unweighted=R["ece_10bin_unweighted"],
+    grid={f"{t:.2f}":bool(R["ece_10bin"]<t) for t in np.arange(0.02,0.155,0.01)})
+ts["brier"]=dict(value=R["cv"]["brier_mean"],base_rate_reference=float(brier_ref),
+    brier_skill_score=float(1-R["cv"]["brier_mean"]/brier_ref),
+    grid={f"{t:.2f}":bool(R["cv"]["brier_mean"]<t) for t in np.arange(0.10,0.155,0.01)},
+    note=("base-rate (climatological) Brier = reference forecast; the audit anchors "
+          "the calibration gate at positive Brier skill rather than a fixed 0.15 cut-off"))
+ts["silhouette"]=dict(value_max=sil_max,
+    grid={f"{t:.2f}":bool(sil_max>=t) for t in np.arange(0.15,0.51,0.05)})
+fa=R["fair"]
+ts["eod"]=dict(grid={f"{t:.2f}":sorted([a for a in fa if fa[a]["eod"]>t]) for t in [0.10,0.15,0.20,0.25,0.30,0.35]})
+ts["dir"]=dict(grid={f"{t:.2f}":sorted([a for a in fa if fa[a]["dir"]<t]) for t in [0.60,0.70,0.80,0.90]})
+ts["cramers_v"]=dict(grid={f"{t:.2f}":sorted([a for a in fa if fa[a]["cv"]>t]) for t in [0.10,0.15,0.20,0.25,0.30]})
+R["threshold_sensitivity"]=ts
+
+# ---------- E10. Provenance ----------
+import sklearn as _sk, catboost as _cb, scipy as _sp
+R["provenance"]=dict(seed=SEED,dataset_file=DATA,
+    dataset_sha256=hashlib.sha256(open(DATA,"rb").read()).hexdigest(),
+    n_rows=int(len(y)),python=sys.version.split()[0],platform=platform.platform(),
+    numpy=np.__version__,pandas=pd.__version__,sklearn=_sk.__version__,
+    catboost=_cb.__version__,scipy=_sp.__version__,
+    generated_utc=datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+
 # ================= FIGURES =================
 plt.rcParams.update({"figure.dpi":150,"font.size":10})
 BLUE="#2b6cb0"; RED="#c53030"; GREY="#718096"; GREEN="#2f855a"
@@ -323,7 +584,7 @@ for b,v,ok in zip(bars,vals,[1,1,1,0]):
             ha="center",fontsize=8)
 ax.set_ylabel("Silhouette"); ax.set_ylim(0,0.4); ax.legend()
 ax.set_title("Segmentation validity across algorithm families")
-plt.tight_layout(); plt.savefig("figs/fig2_segmentation.png"); plt.savefig("figs/fig2_segmentation.pdf"); plt.savefig("figs/fig2_segmentation.svg"); plt.close()
+plt.tight_layout(); plt.savefig("figures/fig2_segmentation.png"); plt.savefig("figures/fig2_segmentation.pdf"); plt.savefig("figures/fig2_segmentation.svg"); plt.close()
 
 # Fig3 confusion matrix (holdout)
 cm=confusion_matrix(yte,(p_te>=.5).astype(int))
@@ -336,7 +597,7 @@ for i in range(2):
 ax.set_xticks([0,1]); ax.set_xticklabels(["Stay","Attrit"])
 ax.set_yticks([0,1]); ax.set_yticklabels(["Stay","Attrit"])
 ax.set_xlabel("Predicted"); ax.set_ylabel("Actual"); ax.set_title("Confusion matrix (holdout, thr=0.50)")
-plt.tight_layout(); plt.savefig("figs/fig3_confusion.png"); plt.savefig("figs/fig3_confusion.pdf"); plt.savefig("figs/fig3_confusion.svg"); plt.close()
+plt.tight_layout(); plt.savefig("figures/fig3_confusion.png"); plt.savefig("figures/fig3_confusion.pdf"); plt.savefig("figures/fig3_confusion.svg"); plt.close()
 R["cm"]=cm.tolist()
 
 # Fig4 calibration curve
@@ -347,7 +608,7 @@ ax.plot([0,1],[0,1],"--",color=GREY,label="perfect")
 ax.plot(mean_pred,frac,"o-",color=BLUE,label=f"CatBoost (ECE={R['ece_10bin']:.3f})")
 ax.set_xlabel("Mean predicted probability"); ax.set_ylabel("Observed frequency")
 ax.set_title(f"Calibration curve (Brier={R['cv']['brier_mean']:.3f})"); ax.legend()
-plt.tight_layout(); plt.savefig("figs/fig4_calibration.png"); plt.savefig("figs/fig4_calibration.pdf"); plt.savefig("figs/fig4_calibration.svg"); plt.close()
+plt.tight_layout(); plt.savefig("figures/fig4_calibration.png"); plt.savefig("figures/fig4_calibration.pdf"); plt.savefig("figures/fig4_calibration.svg"); plt.close()
 
 # Fig5 permutation importance
 fig,ax=plt.subplots(figsize=(6,4))
@@ -355,7 +616,7 @@ top=perm_s.head(10)[::-1]
 ax.barh(range(len(top)),top.values,color=BLUE)
 ax.set_yticks(range(len(top))); ax.set_yticklabels(top.index,fontsize=8)
 ax.set_xlabel("Mean AUC drop"); ax.set_title("Permutation importance (holdout)")
-plt.tight_layout(); plt.savefig("figs/fig5_permutation.png"); plt.savefig("figs/fig5_permutation.pdf"); plt.savefig("figs/fig5_permutation.svg"); plt.close()
+plt.tight_layout(); plt.savefig("figures/fig5_permutation.png"); plt.savefig("figures/fig5_permutation.pdf"); plt.savefig("figures/fig5_permutation.svg"); plt.close()
 
 # Fig6 SHAP summary (bar of mean|SHAP|)
 fig,ax=plt.subplots(figsize=(6,4))
@@ -363,7 +624,7 @@ tops=shap_s.head(10)[::-1]
 ax.barh(range(len(tops)),tops.values,color=GREEN)
 ax.set_yticks(range(len(tops))); ax.set_yticklabels(tops.index,fontsize=8)
 ax.set_xlabel("mean |SHAP value|"); ax.set_title("SHAP feature importance (holdout)")
-plt.tight_layout(); plt.savefig("figs/fig6_shap.png"); plt.savefig("figs/fig6_shap.pdf"); plt.savefig("figs/fig6_shap.svg"); plt.close()
+plt.tight_layout(); plt.savefig("figures/fig6_shap.png"); plt.savefig("figures/fig6_shap.pdf"); plt.savefig("figures/fig6_shap.svg"); plt.close()
 
 # Fig7 fairness (3-panel)
 fig,axes=plt.subplots(1,3,figsize=(13,4))
@@ -382,15 +643,22 @@ mi_items=[("StockOptionLevel\n(MaritalStatus)",R["mi"]["MaritalStatus"]["val"]),
           (f'{R["mi"]["Gender"]["top"]}\n(Gender)',R["mi"]["Gender"]["val"])]
 axes[2].bar([a for a,_ in mi_items],[b for _,b in mi_items],color=GREEN)
 axes[2].set_title("Proxy MI (nats)"); axes[2].tick_params(axis="x",rotation=0,labelsize=7)
-plt.tight_layout(); plt.savefig("figs/fig7_fairness.png"); plt.savefig("figs/fig7_fairness.pdf"); plt.savefig("figs/fig7_fairness.svg"); plt.close()
+plt.tight_layout(); plt.savefig("figures/fig7_fairness.png"); plt.savefig("figures/fig7_fairness.pdf"); plt.savefig("figures/fig7_fairness.svg"); plt.close()
 
-# Fig8 seed sensitivity
-fig,ax=plt.subplots(figsize=(6,4))
-ax.plot(range(1,8),seed_aucs,"o-",color=BLUE)
-ax.axhline(np.mean(seed_aucs),ls="--",color=GREY,label=f"mean={np.mean(seed_aucs):.3f}")
-ax.set_xlabel("Seed index"); ax.set_ylabel("ROC-AUC"); ax.set_ylim(0.7,0.9)
-ax.set_title("Seed-sensitivity (7 seeds)"); ax.legend()
-plt.tight_layout(); plt.savefig("figs/fig8_seed.png"); plt.savefig("figs/fig8_seed.pdf"); plt.savefig("figs/fig8_seed.svg"); plt.close()
+# Fig8 split-robustness: (a) 7-seed check, (b) 100 repeated full-pipeline splits
+fig,axes8=plt.subplots(1,2,figsize=(10,4))
+axes8[0].plot(range(1,8),seed_aucs,"o-",color=BLUE)
+axes8[0].axhline(np.mean(seed_aucs),ls="--",color=GREY,label=f"mean={np.mean(seed_aucs):.3f}")
+axes8[0].set_xlabel("Seed index"); axes8[0].set_ylabel("ROC-AUC"); axes8[0].set_ylim(0.7,0.9)
+axes8[0].set_title("(a) Seed-sensitivity (7 seeds)"); axes8[0].legend()
+axes8[1].hist(rep_split_aucs,bins=15,color=BLUE,alpha=0.75,edgecolor="white")
+lo,hi=np.percentile(rep_split_aucs,[2.5,97.5])
+axes8[1].axvline(lo,ls="--",color=RED); axes8[1].axvline(hi,ls="--",color=RED,
+    label=f"2.5–97.5%: [{lo:.3f}, {hi:.3f}]")
+axes8[1].axvline(rep_split_aucs.mean(),ls="-",color=GREY,label=f"mean={rep_split_aucs.mean():.3f}")
+axes8[1].set_xlabel("Holdout ROC-AUC"); axes8[1].set_ylabel("Count")
+axes8[1].set_title("(b) 100 repeated splits, full refit"); axes8[1].legend(fontsize=8)
+plt.tight_layout(); plt.savefig("figures/fig8_seed.png"); plt.savefig("figures/fig8_seed.pdf"); plt.savefig("figures/fig8_seed.svg"); plt.close()
 
 # Fig9 dashboard (6-panel)
 fig,axes=plt.subplots(2,3,figsize=(14,8))
@@ -416,8 +684,7 @@ axes[1,1].axhline(0.2,ls="--",color=GREY); axes[1,1].set_xticks(x); axes[1,1].se
 axes[1,1].set_title("(e) Subgroup fairness"); axes[1,1].legend(fontsize=7)
 # f seed
 axes[1,2].plot(range(1,8),seed_aucs,"o-",color=BLUE); axes[1,2].set_ylim(0.7,0.9); axes[1,2].set_title("(f) Seed sensitivity")
-plt.tight_layout(); plt.savefig("figs/fig9_dashboard.png"); plt.savefig("figs/fig9_dashboard.pdf"); plt.savefig("figs/fig9_dashboard.svg"); plt.close()
+plt.tight_layout(); plt.savefig("figures/fig9_dashboard.png"); plt.savefig("figures/fig9_dashboard.pdf"); plt.savefig("figures/fig9_dashboard.svg"); plt.close()
 
-json.dump(R, open("results.json","w"), indent=2)
-print("DONE")
-print(json.dumps(R,indent=1)[:60])
+json.dump(R, open("results/results.json","w"), indent=2)
+print("DONE -> results/results.json")
