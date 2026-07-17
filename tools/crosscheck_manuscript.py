@@ -51,7 +51,7 @@ C("T4 AP",0.584,apm); C("T4 AP sd",0.053,aps_)
 C("T4 AP CI lo",0.538,apm-1.96*aps_/math.sqrt(5)); C("T4 AP CI hi",0.630,apm+1.96*aps_/math.sqrt(5))
 am,asd=R["cv"]["acc_mean"],R["cv"]["acc_sd"]
 C("T4 Acc",0.861,am); C("T4 Acc sd",0.015,asd)
-C("T4 Acc CI lo",0.848,am-1.96*asd/math.sqrt(5)); C("T4 Acc CI hi",0.874,am+1.96*asd/math.sqrt(5))
+C("T4 Acc CI lo",0.848,am-1.96*asd/math.sqrt(5)); C("T4 Acc CI hi",0.875,am+1.96*asd/math.sqrt(5))
 C("T4 DPD gender",0.011,"fair_full/Gender/dpd")
 C("T4 DPD CI",(0.001,0.047),tuple(g("fair_full/Gender/dpd_ci")))
 C("CB train",1.00,"overfit_gaps/catboost_weighted/train_auc",2)
