@@ -1,19 +1,21 @@
-# Cover Letter
+# Cover Letter — Second Revision
 
-Dear Editors of *Applied Artificial Intelligence*,
+**Manuscript ID:** 904dad55-d521-4e72-a8c2-c99d1bc97497
+**Title:** A Governance Aware Framework for Auditing Calibration Explainability and Fairness in HR Attrition Prediction Models
+**Journal:** Discover Artificial Intelligence
 
-Please consider the manuscript titled **“A Constrained Auditing Pipeline for Predictive HR Analytics: Explainability, Fairness Diagnostics, and Structural Limitations Demonstrated on a Synthetic Benchmark”** for publication in *Applied Artificial Intelligence*.
+Dear Dr. Seera, dear Editors,
 
-The manuscript presents a constrained auditing pipeline for predictive HR analytics using the IBM HR Analytics Employee Attrition dataset as a synthetic pedagogical benchmark. The study integrates strict out-of-fold preprocessing, supervised attrition modeling, exploratory clustering diagnostics, SHAP and permutation-based explainability, subgroup fairness diagnostics, robustness checks, and explicit deployment limitations.
+Thank you for the opportunity to revise the manuscript. The decision letter converged on one structural issue — that reported values could not be traced to the shipped analysis output — and four interpretive ones. This revision addresses the structural issue at its root rather than patching symptoms:
 
-The paper’s central empirical finding is that broader behavioral and contextual features improve attrition prediction relative to a salary-only benchmark. The best salary-only benchmark achieved ROC-AUC = 0.6688, while the best full-feature CatBoost model achieved ROC-AUC = 0.8181. The manuscript interprets this result as predictive evidence only, not as causal evidence of retention mechanisms or intervention effectiveness.
+1. **Single executable workflow.** One script (`pipeline.py`, fixed seed) regenerates the single results file (`results/results.json`) and every figure; all superseded artifacts were removed from the repository. A number-to-key map (`TRACEABILITY.md`) covers every value in the manuscript, and a clean-checkout re-run reproduces the committed results byte-identically. A scripted 208-point cross-check verifies every manuscript number against the results file.
+2. **Prespecified model selection and overfitting assessment.** An outcome-independent rule (calibration gate → max CV AUC → parsimony) selects the unweighted logistic regression; CatBoost is retained only as the audit-demonstration subject. A new subsection reports per-family optimism gaps and a CatBoost regularization sweep.
+3. **Corrected uncertainty interpretation.** The holdout bootstrap is described strictly as split-conditional; 100 repeated full-pipeline splits with complete refitting now provide the across-split estimate.
+4. **Reproducible XAI and fairness analyses.** SHAP–permutation agreement, masking controls, shuffled-label analysis, and mutual-information permutation nulls are computed in the pipeline with repeated controls and uncertainty; fairness tables carry subgroup sizes, attrited counts, and bootstrap intervals; all governance cut-offs are swept and labeled illustrative escalation defaults.
+5. **Moderated claims.** The contribution is framed as a structured methodological synthesis and proof-of-concept auditing workflow, with a study-level literature comparison against identifiable publications; the requested Declarations section has been added.
 
-The manuscript is aligned with the journal’s applied AI scope because it focuses on the design, evaluation, interpretation, and governance of an AI workflow in an organizational decision-support context. It does not claim algorithmic novelty, deployment readiness, validated psychological archetypes, or causal incentive optimization. Clustering results are presented as exploratory and descriptive, and fairness diagnostics are presented as risk-identification tools rather than fairness guarantees.
-
-We believe the manuscript may be of interest to readers working on explainable AI, responsible AI, organizational analytics, and fairness-aware decision-support systems.
-
-Thank you for your consideration.
+A complete point-by-point response accompanies this letter. All code and outputs are public: https://github.com/SilverCoin256/employee-incentive-ai-research
 
 Sincerely,
-
-[Author Name]
+Shaurya Gupta
+Independent Researcher
