@@ -1,25 +1,15 @@
 # employee-incentive-ai-research
 
-Code and evaluation pipeline for:
-
-**"A Governance Aware Framework for Auditing Calibration Explainability and Fairness in HR Attrition Prediction Models"**
+Analysis code for **"A Governance Aware Framework for Auditing Calibration Explainability and Fairness in HR Attrition Prediction Models"**
 *Discover Artificial Intelligence (Springer Nature)*
 
 ---
 
 ## What this is
 
-A single reproducible pipeline that audits an HR attrition model across calibration,
-uncertainty, explainability, and fairness. The contribution is the evaluation
-architecture, not a new model. The IBM HR Analytics dataset is synthetic and public,
-chosen so the whole pipeline can be replicated without data-access barriers.
+This project uses the public, synthetic IBM HR Analytics dataset to test how model selection changes when calibration is part of the evaluation. The prespecified rule selected unweighted logistic regression. CatBoost is the worked example for the attribution and subgroup audits.
 
-**Every number in the manuscript is produced by one run of `pipeline.py` (seed 42).**
-It writes a single machine-readable output, `results/results.json`, and regenerates
-every figure (`figures/`) directly from the run's raw predictions — no values are
-embedded in the plotting code, and no second results file exists.
-[`TRACEABILITY.md`](TRACEABILITY.md) maps each reported table, figure, and in-text
-value to its named key in `results/results.json`.
+Run `pipeline.py` with the default seed (42) to regenerate the figures and write `results/results.json`. [The traceability table](TRACEABILITY.md) maps the manuscript values to keys in that file.
 
 ```
 pip install -r requirements.txt
